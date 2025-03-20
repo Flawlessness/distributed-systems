@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  manager:
+    build: ./manager
+    ports:
+      - "8080:8080"
+    networks:
+      - crackhash-net
+
+  worker:
+    build: ./worker
+    networks:
+      - crackhash-net
+    deploy:
+      mode: replicated
+      replicas: 3
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 120s
+
+networks:
+  crackhash-net:
