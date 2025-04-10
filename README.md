@@ -1,5 +1,7 @@
 # distributed-systems
 
+![hash (1)](https://github.com/user-attachments/assets/40f22c4b-dea5-4c94-a45f-f88d58dfff74)
+
 ### Запуcк
 **Требования:**
 
