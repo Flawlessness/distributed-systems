@@ -1,0 +1,4 @@
+aiohttp
+pika
+motor==3.1.2
+pymongo==4.3.3

@@ -1,0 +1,126 @@
+version: '3'
+
+services:
+  manager:
+    build: ./manager
+    ports:
+      - "8080:8080"
+    networks:
+      - crackhash-net
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+      mongo-secondary1:
+        condition: service_healthy
+      mongo-secondary2:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build: ./worker
+    networks:
+      - crackhash-net
+    deploy:
+      mode: replicated
+      replicas: 3
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 120s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  mongo-primary:
+    image: mongo:6.0
+    command: mongod --replSet rs0 --bind_ip_all --quiet --logpath /dev/null
+    networks:
+      - crackhash-net
+    volumes:
+      - mongo-data-primary:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017 --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  mongo-secondary1:
+    image: mongo:6.0
+    command: mongod --replSet rs0 --bind_ip_all --logpath /dev/null
+    networks:
+      - crackhash-net
+    volumes:
+      - mongo-data-secondary1:/data/db
+    depends_on:
+      - mongo-primary
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017 --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo-secondary2:
+    image: mongo:6.0
+    command: mongod --replSet rs0 --bind_ip_all --logpath /dev/null
+    networks:
+      - crackhash-net
+    volumes:
+      - mongo-data-secondary2:/data/db
+    depends_on:
+      - mongo-primary
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017 --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo-init:
+    image: mongo:5.0
+    depends_on:
+      - mongo-primary
+      - mongo-secondary1
+      - mongo-secondary2
+    command: >
+      bash -c "
+        mongosh --host mongo-primary --eval \"rs.initiate({
+          _id: 'rs0',
+          members: [
+            {_id: 0, host: 'mongo-primary:27017'},
+            {_id: 1, host: 'mongo-secondary1:27017'},
+            {_id: 2, host: 'mongo-secondary2:27017'}
+          ]
+        })\"
+      "
+    networks:
+      - crackhash-net
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "status" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - crackhash-net
+
+volumes:
+  mongo-data-primary:
+  mongo-data-secondary1:
+  mongo-data-secondary2:
+  rabbitmq_data:
+
+networks:
+  crackhash-net:
