@@ -6,6 +6,8 @@ from typing import Dict, Any, Optional, Union
 from pika.connection import Connection
 from pika.channel import Channel
 import logging
+import asyncio
+from config import *
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,7 +62,7 @@ class RabbitMQClient:
         if self.connection and self.connection.is_open:
             self.connection.close()
 
-    def push_string(self, message: str) -> bool:
+    async def push_string(self, message: str) -> bool:
         """
         Push a dictionary to the queue.
 
@@ -82,7 +84,7 @@ class RabbitMQClient:
                         break
                 except Exception as e:
                     logging.error(f"Wait connect()")
-                    sleep(1)
+                    await asyncio.sleep(GET_TIMEOUT_SECONDS)
 
         try:
             self.channel.basic_publish(
@@ -98,7 +100,7 @@ class RabbitMQClient:
             logging.error(f"Failed to send message: {e}")
             return False
 
-    def get(self, ack: bool = False) -> Optional[MessageType]:
+    async def get(self, ack: bool = False) -> Optional[MessageType]:
         """
         Get a single message from the queue.
 
@@ -121,7 +123,7 @@ class RabbitMQClient:
                         break
                 except Exception as e:
                     logging.error(f"Wait connect()")
-                    sleep(1)
+                    await asyncio.sleep(GET_TIMEOUT_SECONDS)
 
         method_frame, properties, body = self.channel.basic_get(
             queue=self.queue_name,

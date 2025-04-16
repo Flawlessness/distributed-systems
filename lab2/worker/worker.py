@@ -48,13 +48,13 @@ class WorkerHelper:
                 word = self.num_to_word(word_num, length)
                 md5 = hashlib.md5(word.encode()).hexdigest()
                 if md5 == hash_target:
-                    self.send_response(request_id, part_number, part_count, [word], partial=True)
+                    await self.send_response(request_id, part_number, part_count, [word], partial=True)
                 self.current_tasks += 1
                 if self.current_tasks % 10000 == 0:
                     await asyncio.sleep(0)
         return results
 
-    def send_response(self, request_id: str, part_number: int, part_count: int, results: List[str], partial: bool = False) -> None:
+    async def send_response(self, request_id: str, part_number: int, part_count: int, results: List[str], partial: bool = False) -> None:
         root = ET.Element('CrackResult')
         ET.SubElement(root, 'RequestId').text = request_id
         ET.SubElement(root, 'PartNumber').text = str(part_number)
@@ -73,7 +73,7 @@ class WorkerHelper:
 
         logging.info(f"Send result {xml_data}")
         try:
-            self.worker_results_queue.push_string(xml_data)
+            await self.worker_results_queue.push_string(xml_data)
         except Exception as e:
             logging.error(f"Exception occurred: {e}")
 
@@ -102,7 +102,7 @@ class Worker:
     async def process_task(self) -> None:
         while True:
             try:
-                task_data = self.worker_task_queue.get(ack=True)
+                task_data = await self.worker_task_queue.get(ack=True)
                 if not task_data:
                     await asyncio.sleep(GET_TIMEOUT_SECONDS)
                     continue
@@ -118,7 +118,7 @@ class Worker:
                 results = await self.worker_helper.process_task(request_id, hash_target, max_length, part_number,
                                                                 part_count)
 
-                self.worker_helper.send_response(request_id, part_number, part_count, results)
+                await self.worker_helper.send_response(request_id, part_number, part_count, results)
 
             except Exception as e:
                 logging.error(f"Exception worker.process_task {e}")
@@ -126,6 +126,7 @@ class Worker:
 
     async def handle_progress(self, request: web.Request) -> web.Response:
         if self.worker_helper.total_tasks != 0:
+            logging.info(f"worker: {self.worker_helper.current_tasks/self.worker_helper.total_tasks}")
             return web.Response(text=f"{self.worker_helper.current_tasks/self.worker_helper.total_tasks}")
         else:
             return web.Response(text=f"0")

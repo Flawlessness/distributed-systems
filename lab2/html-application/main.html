@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hash Cracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .status-box {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #28a745;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 20px auto;
+            width: 100%;
+            max-width: 300px;
+        }
+        button:hover {
+            background-color: #0069d9;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #e7f5ff;
+            min-height: 60px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hash Cracker</h1>
+
+        <div class="status-box">
+            <div id="main-status">Ready</div>
+        </div>
+
+        <form id="hash-form">
+            <label for="hash-input">Hash to crack:</label>
+            <input type="text" id="hash-input" value="15c2341cae7ff4fc4018fe598c5da5d5" required>
+
+            <label for="max-length">Maximum length:</label>
+            <input type="number" id="max-length" value="5" min="1" max="10" required>
+
+            <button type="submit">Crack Hash</button>
+        </form>
+
+        <div class="progress-container">
+            <div id="status-text">Status: IDLE</div>
+            <div id="progress-text">Progress: 0%</div>
+            <div class="progress-bar">
+                <div class="progress" id="progress-bar"></div>
+            </div>
+        </div>
+
+        <div class="result-box">
+            <strong>Results:</strong>
+            <div id="result-text">None</div>
+        </div>
+    </div>
+
+    <script>
+        let currentRequestId = null;
+        let progressInterval = null;
+
+        document.getElementById('hash-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            sendRequest();
+        });
+
+        function sendRequest() {
+            const hash = document.getElementById('hash-input').value;
+            const maxLength = document.getElementById('max-length').value;
+
+            // Clear any existing interval
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+
+            // Update UI
+            document.getElementById('main-status').textContent = 'Sending request...';
+            document.getElementById('status-text').textContent = 'Status: PROCESSING';
+            document.getElementById('progress-text').textContent = 'Progress: 0%';
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('result-text').textContent = 'None';
+
+            // Prepare request data
+            const data = {
+                hash: hash,
+                maxLength: parseInt(maxLength)
+            };
+
+            // Send request to server
+            fetch('http://localhost:8080/api/hash/crack', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                currentRequestId = data.RequestId;
+                if (currentRequestId) {
+                    document.getElementById('main-status').textContent = `Request ID: ${currentRequestId}`;
+                    // Start checking progress
+                    progressInterval = setInterval(() => checkProgress(currentRequestId), 1000);
+                } else {
+                    document.getElementById('main-status').textContent = 'Error: No Request ID received';
+                }
+            })
+            .catch(error => {
+                document.getElementById('main-status').textContent = `Error: ${error.message}`;
+                document.getElementById('status-text').textContent = 'Status: ERROR';
+            });
+        }
+
+        function checkProgress(requestId) {
+            if (currentRequestId !== requestId) return;
+
+            fetch(`http://localhost:8080/api/hash/status?requestId=${requestId}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateProgressDisplay(data);
+
+                    if (data.status === 'READY' || data.status === 'ERROR') {
+                        clearInterval(progressInterval);
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('main-status').textContent = `Error: ${error.message}`;
+                    document.getElementById('status-text').textContent = 'Status: ERROR';
+                    clearInterval(progressInterval);
+                });
+        }
+
+        function updateProgressDisplay(data) {
+            const status = data.status || 'UNKNOWN';
+            const progress = data.progress || '0%';
+            const partialResults = data.partial_result || [];
+            const results = data.data || [];
+
+            document.getElementById('status-text').textContent = `Status: ${status}`;
+            document.getElementById('progress-text').textContent = `Progress: ${progress}`;
+            document.getElementById('progress-bar').style.width = progress;
+
+            if (partialResults.length > 0) {
+                document.getElementById('result-text').textContent = `Partial Results: ${partialResults.join(', ')}`;
+            } else if (results.length > 0) {
+                document.getElementById('result-text').textContent = `Result: ${results.join(', ')}`;
+                document.getElementById('main-status').textContent = 'Hash Cracker - Completed!';
+            } else {
+                document.getElementById('result-text').textContent = 'None';
+            }
+
+            if (status === 'ERROR') {
+                document.getElementById('main-status').textContent = 'Hash Cracker - Failed';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 from time import sleep
 
+import aiohttp_cors
 import aiohttp
 from aiohttp import web
 import uuid
@@ -62,7 +63,7 @@ class Manager:
     async def process_requests(self) -> None:
         while True:
             try:
-                request_data, delivery_tag = self.manager_queue.get()
+                request_data, delivery_tag = await self.manager_queue.get()
                 if not request_data:
                     await asyncio.sleep(GET_TIMEOUT_SECONDS)
                     continue
@@ -95,7 +96,7 @@ class Manager:
                         'part_count': part_count
                     }
                     self.task_data = task_data
-                    self.worker_task_queue.push(task_data)
+                    await self.worker_task_queue.push(task_data)
 
                 while True:
                     request_data = await self.request_store.get_request(request_id)
@@ -116,7 +117,7 @@ class Manager:
     async def process_results(self) -> None:
         while True:
             try:
-                result_data = self.worker_results_queue.get_string(ack=True)
+                result_data = await self.worker_results_queue.get_string(ack=True)
                 if not result_data:
                     await asyncio.sleep(GET_TIMEOUT_SECONDS)
                     continue
@@ -158,7 +159,7 @@ class Manager:
         part_count = len(WORKER_URLS)
         await self.request_store.connect()
         await self.request_store.create_request(request_id, part_count)
-        self.manager_queue.push({
+        await self.manager_queue.push({
             'request_id': request_id,
             'hash': hash_target,
             'max_length': max_length
@@ -185,8 +186,11 @@ class Manager:
         if request_data['status'] == Status.IN_PROGRESS.value:
             for part_number in range(part_count):
                 percent = await self.get_progress(request_id, WORKER_URLS[part_number])
-                if percent and float(percent) != 0 and float(percent) != 1:
-                    total_percentage += float(percent)
+                logging.info(f"Gen: {percent}")
+                total_percentage += float(percent)
+            total_percentage -= request_data['parts_received']
+            logging.info(f"parts_received: {request_data['parts_received'] / request_data['part_count']}")
+
             total_percentage = ((total_percentage / len(WORKER_URLS)
                                 + request_data['parts_received']/request_data['part_count'])
                                 * 100)
@@ -248,7 +252,7 @@ class Manager:
                     if self.workers_list[url]:
                         logging.error(f"Worker {url} unavailable. Resubmitting a task...")
                         self.task_data["part_number"] = int(self.workers_list[url])
-                        self.worker_task_queue.push(self.task_data)
+                        await self.worker_task_queue.push(self.task_data)
                         self.workers_list[url] = None
 
 

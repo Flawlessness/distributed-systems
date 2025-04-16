@@ -7,6 +7,8 @@ from typing import Dict, Any, Optional, Union
 from pika.connection import Connection
 from pika.channel import Channel
 import logging
+import asyncio
+from config import *
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,7 +63,7 @@ class RabbitMQClient:
         if self.connection and self.connection.is_open:
             self.connection.close()
 
-    def push(self, message: MessageType) -> bool:
+    async def push(self, message: MessageType) -> bool:
         """
         Push a dictionary to the queue.
 
@@ -71,10 +73,13 @@ class RabbitMQClient:
         Returns:
             bool: True if message was sent successfully
         """
+        connect = True
         try:
             self.channel.queue_declare(queue=self.queue_name, passive=True)
-        except Exception as e1:
-            logging.error(f"Connection not established... Wait connect")
+        except Exception as e:
+            logging.error(f"Connection not established...")
+            connect = False
+        if not connect:
             while True:
                 try:
                     self.connect()
@@ -83,7 +88,7 @@ class RabbitMQClient:
                         break
                 except Exception as e:
                     logging.error(f"Wait connect()")
-                    sleep(1)
+                    await asyncio.sleep(GET_TIMEOUT_SECONDS)
 
         try:
             self.channel.basic_publish(
@@ -100,7 +105,7 @@ class RabbitMQClient:
             logging.error(f"Failed to send message: {e}")
             return False
 
-    def get(self, ack: bool = False):
+    async def get(self, ack: bool = False):
         """
         Get a single message from the queue.
 
@@ -110,11 +115,13 @@ class RabbitMQClient:
         Returns:
             Optional dictionary with message content or None if queue is empty
         """
-
+        connect = True
         try:
             self.channel.queue_declare(queue=self.queue_name, passive=True)
-        except Exception as e1:
-            logging.error(f"Connection not established... Wait connect")
+        except Exception as e:
+            logging.error(f"Connection not established...")
+            connect = False
+        if not connect:
             while True:
                 try:
                     self.connect()
@@ -123,7 +130,7 @@ class RabbitMQClient:
                         break
                 except Exception as e:
                     logging.error(f"Wait connect()")
-                    sleep(1)
+                    await asyncio.sleep(GET_TIMEOUT_SECONDS)
 
         method_frame, properties, body = self.channel.basic_get(
             queue=self.queue_name,
@@ -148,7 +155,7 @@ class RabbitMQClient:
             self.channel.basic_nack(method_frame.delivery_tag, requeue=False)
             return None, None
 
-    def get_string(self, ack: bool = False) -> Optional[str]:
+    async def get_string(self, ack: bool = False) -> Optional[str]:
         """
         Get a single message from the queue.
 
@@ -158,10 +165,13 @@ class RabbitMQClient:
         Returns:
             Optional dictionary with message content or None if queue is empty
         """
+        connect = True
         try:
             self.channel.queue_declare(queue=self.queue_name, passive=True)
-        except Exception as e1:
-            logging.error(f"Connection not established... Wait connect")
+        except Exception as e:
+            logging.error(f"Connection not established...")
+            connect = False
+        if not connect:
             while True:
                 try:
                     self.connect()
@@ -170,7 +180,7 @@ class RabbitMQClient:
                         break
                 except Exception as e:
                     logging.error(f"Wait connect()")
-                    sleep(1)
+                    await asyncio.sleep(GET_TIMEOUT_SECONDS)
 
         method_frame, properties, body = self.channel.basic_get(
             queue=self.queue_name,
